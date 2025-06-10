@@ -7,7 +7,6 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 # 准备数据集
-# 从指定路径加载 CIFAR10 训练集和测试集
 train_data = torchvision.datasets.CIFAR10(
     root="D:\\PycharmProjects\\day1\\day02\\dataset_chen",
     train=True,
@@ -22,48 +21,43 @@ test_data = torchvision.datasets.CIFAR10(
     download=True
 )
 
-# 输出数据集长度信息
+# 数据集长度
 train_data_size = len(train_data)
 test_data_size = len(test_data)
 print(f"训练数据集的长度: {train_data_size}")
 print(f"测试数据集的长度: {test_data_size}")
 
-# 加载数据集，训练集开启随机打乱
+# 加载数据集
 train_loader = DataLoader(train_data, batch_size=64, shuffle=True)
 test_loader = DataLoader(test_data, batch_size=64)
 
-# 定义改进的 AlexNet 模型
-class ModifiedAlexNet(nn.Module):
+# 定义AlexNet模型
+class AlexNet(nn.Module):
     def __init__(self, num_classes=10):
         super().__init__()
-        # 特征提取部分
         self.features = nn.Sequential(
-            # 调整第一个卷积层的步长和输出通道数
-            nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=1),  # 32x32x32
+            nn.Conv2d(3, 64, kernel_size=3, stride=2, padding=1),  # 64x16x16
             nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2),  # 32x16x16
-            # 调整第二个卷积层的输出通道数
-            nn.Conv2d(32, 128, kernel_size=3, padding=1),  # 128x16x16
+            nn.MaxPool2d(kernel_size=2),  # 64x8x8
+            nn.Conv2d(64, 192, kernel_size=3, padding=1),  # 192x8x8
             nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2),  # 128x8x8
-            nn.Conv2d(128, 256, kernel_size=3, padding=1),  # 256x8x8
+            nn.MaxPool2d(kernel_size=2),  # 192x4x4
+            nn.Conv2d(192, 384, kernel_size=3, padding=1),  # 384x4x4
             nn.ReLU(inplace=True),
-            nn.Conv2d(256, 256, kernel_size=3, padding=1),  # 256x8x8
+            nn.Conv2d(384, 256, kernel_size=3, padding=1),  # 256x4x4
             nn.ReLU(inplace=True),
-            nn.Conv2d(256, 256, kernel_size=3, padding=1),  # 256x8x8
+            nn.Conv2d(256, 256, kernel_size=3, padding=1),  # 256x4x4
             nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2)  # 256x4x4
+            nn.MaxPool2d(kernel_size=2)  # 256x2x2
         )
-        # 分类部分
         self.classifier = nn.Sequential(
             nn.Dropout(),
-            # 调整全连接层的输入维度
-            nn.Linear(256 * 4 * 4, 2048),
+            nn.Linear(256 * 2 * 2, 4096),
             nn.ReLU(inplace=True),
             nn.Dropout(),
-            nn.Linear(2048, 2048),
+            nn.Linear(4096, 4096),
             nn.ReLU(inplace=True),
-            nn.Linear(2048, num_classes)
+            nn.Linear(4096, num_classes)
         )
 
     def forward(self, x):
@@ -72,36 +66,35 @@ class ModifiedAlexNet(nn.Module):
         x = self.classifier(x)
         return x
 
-# 设备配置，优先使用 GPU
+# 设备配置
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = ModifiedAlexNet().to(device)
+chen = AlexNet().to(device)
 print("使用设备:", device)
 
-# 定义损失函数和优化器
+# 损失函数和优化器
 loss_fn = nn.CrossEntropyLoss()
 learning_rate = 0.01
-optim = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
+optim = torch.optim.SGD(chen.parameters(), lr=learning_rate, momentum=0.9)
 
-# 训练参数设置
+# 训练参数
 total_train_step = 0
 total_test_step = 0
 epoch = 10
 
-# 使用 TensorBoard 记录训练过程
+# Tensorboard
 writer = SummaryWriter("logs_train")
 
 start_time = time.time()
 
-# 开始训练循环
 for i in range(epoch):
-    print(f"-----第{i + 1}轮训练开始-----")
-    model.train()
+    print(f"-----第{i+1}轮训练开始-----")
+    chen.train()
     for data in train_loader:
         imgs, targets = data
         imgs = imgs.to(device)
         targets = targets.to(device)
 
-        outputs = model(imgs)
+        outputs = chen(imgs)
         loss = loss_fn(outputs, targets)
 
         optim.zero_grad()
@@ -116,7 +109,7 @@ for i in range(epoch):
     end_time = time.time()
     print(f"本轮训练时间: {end_time - start_time:.2f}秒")
 
-    model.eval()
+    chen.eval()
     total_test_loss = 0.0
     total_accuracy = 0
     with torch.no_grad():
@@ -125,7 +118,7 @@ for i in range(epoch):
             imgs = imgs.to(device)
             targets = targets.to(device)
 
-            outputs = model(imgs)
+            outputs = chen(imgs)
             loss = loss_fn(outputs, targets)
             total_test_loss += loss.item()
 
@@ -142,8 +135,8 @@ for i in range(epoch):
     writer.add_scalar("test_accuracy", test_accuracy, total_test_step)
     total_test_step += 1
 
-    torch.save(model.state_dict(), f"model_save/modified_alexnet_{i + 1}.pth")
-    print(f"模型已保存: modified_alexnet_{i + 1}.pth")
+    torch.save(chen.state_dict(), f"model_save/alexnet_{i+1}.pth")
+    print(f"模型已保存: alexnet_{i+1}.pth")
 
 writer.close()
 print("训练完成!")
